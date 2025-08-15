@@ -7,6 +7,9 @@ import com.karan.leavemanagement.model.LeaveRequest;
 import com.karan.leavemanagement.model.LeaveStatus;
 import com.karan.leavemanagement.repository.LeaveRepository;
 import com.karan.leavemanagement.service.LeaveRequestService;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
 import java.util.Collections;
@@ -105,14 +108,32 @@ public class LeaveRequestServiceImpl implements LeaveRequestService {
 
     @Override
     public LeaveResponseDTO cancelLeave(LeaveRequestDTO leaveRequestDTO, Long leaveId) {
-        LeaveRequest leave = leaveRepository.findById(leaveId).orElseThrow(()-> new LEAVENOTFOUNDEXCEPTION("leave not found for given id " + leaveId));
-        if(leave.getStatus()!= LeaveStatus.PENDING) {
+        LeaveRequest leave = leaveRepository.findById(leaveId)
+                .orElseThrow(() -> new LEAVENOTFOUNDEXCEPTION("leave not found for given id " + leaveId));
+
+        if (leave.getStatus() != LeaveStatus.PENDING) {
             throw new IllegalStateException("Only pending leaves can be cancelled.");
         }
+
+        // Get current authenticated user
+        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
+        UserDetails currentUser = (UserDetails) auth.getPrincipal();
+        String userRole = currentUser.getAuthorities().stream()
+                .findFirst()
+                .map(grantedAuthority -> grantedAuthority.getAuthority().replace("ROLE_", ""))
+                .orElse("");
+        Long currentUserId = Long.parseLong(currentUser.getUsername()); // assuming username is employeeId, otherwise map accordingly
+
+        // Employee can only cancel their own request
+        if (userRole.equals("EMPLOYEE") && !leave.getEmployeeId().equals(currentUserId)) {
+            throw new IllegalStateException("Employees can only cancel their own leave requests");
+        }
+
         leave.setStatus(LeaveStatus.CANCELLED);
-        leave.setActionBy(leaveRequestDTO.getActionBy());
+        leave.setActionBy(userRole);
         leave.setRemarks(leaveRequestDTO.getReason());
-        LeaveRequest saved =leaveRepository.save(leave);
+
+        LeaveRequest saved = leaveRepository.save(leave);
 
         return LeaveResponseDTO.builder()
                 .id(saved.getId())
@@ -127,7 +148,6 @@ public class LeaveRequestServiceImpl implements LeaveRequestService {
                 .updatedDate(saved.getUpdatedDate())
                 .build();
     }
-
     @Override
     public LeaveResponseDTO getLeaveRequestById(Long id) {
         LeaveRequest leave = leaveRepository.findById(id).orElseThrow(()-> new LEAVENOTFOUNDEXCEPTION("leave not found for given id" + id));

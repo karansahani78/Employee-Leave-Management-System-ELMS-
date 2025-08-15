@@ -35,6 +35,7 @@ public class SecurityConfig {
                                 "/api/v1/requests/leaves/**",
                                 "/api/v1/requests/id/**",
                                 "/api/v1/requests/cancel/**").hasRole("MANAGER")
+                        .requestMatchers("/api/v1/requests/cancel/**").hasAnyAuthority("MANAGER", "EMPLOYEE")
                         // Only EMPLOYEE can apply leaves
                         .requestMatchers("/api/v1/requests/apply/**").hasRole("EMPLOYEE")
                         // All other /requests/** endpoints require authentication
